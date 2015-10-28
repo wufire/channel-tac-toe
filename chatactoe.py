@@ -15,13 +15,12 @@ import logging
 import os
 import random
 import re
-from django.utils import simplejson
+import json
 from google.appengine.api import channel
 from google.appengine.api import users
 from google.appengine.ext import db
-from google.appengine.ext import webapp
+import webapp2
 from google.appengine.ext.webapp import template
-from google.appengine.ext.webapp.util import run_wsgi_app
 
 
 class Game(db.Model):
@@ -32,7 +31,7 @@ class Game(db.Model):
   moveX = db.BooleanProperty()
   winner = db.StringProperty()
   winning_board = db.StringProperty()
-  
+
 
 class Wins():
   x_win_patterns = ['XXX......',
@@ -45,7 +44,7 @@ class Wins():
                     '..X.X.X..']
 
   o_win_patterns = map(lambda s: s.replace('X','O'), x_win_patterns)
-  
+
   x_wins = map(lambda s: re.compile(s), x_win_patterns)
   o_wins = map(lambda s: re.compile(s), o_win_patterns)
 
@@ -65,7 +64,7 @@ class GameUpdater():
       'winner': self.game.winner,
       'winningBoard': self.game.winning_board
     }
-    return simplejson.dumps(gameUpdate)
+    return json.dumps(gameUpdate)
 
   def send_update(self):
     message = self.get_game_message()
@@ -82,7 +81,7 @@ class GameUpdater():
       # X just moved, check for X wins
       wins = Wins().x_wins
       potential_winner = self.game.userX.user_id()
-      
+
     for win in wins:
       if win.match(self.game.board):
         self.game.winner = potential_winner
@@ -115,8 +114,7 @@ class GameFromRequest():
   def get_game(self):
     return self.game
 
-
-class MovePage(webapp.RequestHandler):
+class MovePage(webapp2.RequestHandler):
 
   def post(self):
     game = GameFromRequest(self.request).get_game()
@@ -126,13 +124,13 @@ class MovePage(webapp.RequestHandler):
       GameUpdater(game).make_move(id, user)
 
 
-class OpenedPage(webapp.RequestHandler):
+class OpenedPage(webapp2.RequestHandler):
   def post(self):
     game = GameFromRequest(self.request).get_game()
     GameUpdater(game).send_update()
 
 
-class MainPage(webapp.RequestHandler):
+class MainPage(webapp2.RequestHandler):
   """The main UI page, renders the 'index.html' template."""
 
   def get(self):
@@ -174,14 +172,12 @@ class MainPage(webapp.RequestHandler):
       self.redirect(users.create_login_url(self.request.uri))
 
 
-application = webapp.WSGIApplication([
+routes = [
     ('/', MainPage),
     ('/opened', OpenedPage),
-    ('/move', MovePage)], debug=True)
+    ('/move', MovePage)
+]
 
+config = {}
 
-def main():
-  run_wsgi_app(application)
-
-if __name__ == "__main__":
-  main()
+app = webapp2.WSGIApplication(routes=routes, debug=True, config=config)
